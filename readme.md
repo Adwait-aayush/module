@@ -29,12 +29,11 @@ Plug-and-play middleware utilities like auth guards, request logging, or your ow
 ### 🔢 Random String Generator  
 Create secure, random, URL-safe strings. Great for file renaming, access codes, and unique IDs.
 
-### 📂 Directory Creation *(in progress)*  
-Ensure target directories exist — automatically creates them with the right permissions if missing.
-
 ### 📄 JSON Utilities *(in progress)*  
 Safely decode JSON from HTTP requests and encode structured responses with proper error handling.
 
+###    SlugGeneration
+Generate slug from string.
 ---
 
 ## 🚀 Installation
@@ -97,6 +96,20 @@ func main() {
     randomStr := m.GenRandomString(16)
     fmt.Println("Random string:", randomStr)
 }
+```
+
+### Generate Slug
+
+```go
+import "github.com/Ayush/module"
+
+func main() {
+    m := module.Module{}
+    str:="Random String"
+    Str := m.MakeSlug(str)
+    fmt.Println("Slug:",Str)
+}
+
 ```
 
 

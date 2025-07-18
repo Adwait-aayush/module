@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -155,4 +156,16 @@ func (m *Module) CreateDirIfNotExist(dir string) error {
 		}
 	}
 	return nil
+}
+
+func (m *Module) MakeSlug(s string)(string,error){
+	if s==""{
+		return "",errors.New("slug cannot be empty")
+	}
+var re = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+slug:=strings.Trim(re.ReplaceAllString(strings.ToLower(s),"-"),"-")
+if len(slug)==0{
+return "",errors.New("slug cannot be empty")
+}
+return slug, nil
 }

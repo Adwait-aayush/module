@@ -178,12 +178,37 @@ func TestTools_UploadOneFile(t *testing.T) {
 	}
 }
 
-func TestMod_CreateDirIfNotExist(t *testing.T){
+func TestMod_CreateDirIfNotExist(t *testing.T) {
 	var mod Module
 	err := mod.CreateDirIfNotExist("./testdata/mydir")
 	if err != nil {
 		t.Error(err)
 	}
-	
-	_=os.Remove("./testdata/mydir")
+
+	_ = os.Remove("./testdata/mydir")
+}
+
+var slugTest = []struct {
+	name string
+	n    string
+	expected string
+	error bool
+}{
+	{"ValidSlug", "Hello World! This is a test", "hello-world-this-is-a-test", false},
+	{"InvalidSlug", "Hello World! This is a test", "", true},
+}
+
+func TestMod_TestSlug(t *testing.T) {
+var mod Module
+for _, e := range slugTest {
+	slug,err:= mod.MakeSlug(e.n)
+	if err != nil && !e.error {
+		t.Errorf("expected error%s for but did not recieve %s", e.name, err.Error())
+	}
+	if !e.error &&slug!= e.expected {
+		t.Errorf("expected slug %s but got %s", e.expected, slug)
+	}
+
+
+}
 }
