@@ -92,14 +92,14 @@ func TestMod_UploadFiles(t *testing.T) {
 	}
 }
 
-var uploadOneTests = []struct {
-	name          string
-	uploadDir     string
-	errorExpected bool
-}{
-	{name: "valid", uploadDir: "./testdata/uploads/", errorExpected: false},
-	{name: "invalid", uploadDir: "//", errorExpected: true},
-}
+// var uploadOneTests = []struct {
+// 	name          string
+// 	uploadDir     string
+// 	errorExpected bool
+// }{
+// 	{name: "valid", uploadDir: "./testdata/uploads/", errorExpected: false},
+// 	{name: "invalid", uploadDir: "//", errorExpected: true},
+// }
 
 func TestTools_UploadOneFile(t *testing.T) {
 	var uploadOneTests = []struct {
@@ -176,4 +176,14 @@ func TestTools_UploadOneFile(t *testing.T) {
 
 		wg.Wait()
 	}
+}
+
+func TestMod_CreateDirIfNotExist(t *testing.T){
+	var mod Module
+	err := mod.CreateDirIfNotExist("./testdata/mydir")
+	if err != nil {
+		t.Error(err)
+	}
+	
+	_=os.Remove("./testdata/mydir")
 }

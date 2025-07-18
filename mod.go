@@ -145,3 +145,14 @@ func (m *Module) UploadFiles(r *http.Request, uploadDir string, rename ...bool) 
 	}
 	return uploadedFiles, nil
 }
+
+
+func (m *Module) CreateDirIfNotExist(dir string) error {
+	const mode=0755
+	if _,err:=os.Stat(dir);os.IsNotExist(err){
+		if err:=os.MkdirAll(dir,mode);err!=nil{
+			return fmt.Errorf("error creating upload directory: %v",err)
+		}
+	}
+	return nil
+}
