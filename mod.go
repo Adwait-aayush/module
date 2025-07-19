@@ -1,6 +1,7 @@
 package module
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -220,33 +221,60 @@ func (m *Module) ReadJSON(w http.ResponseWriter, r *http.Request, data interface
 	return nil
 }
 
-func (m *Module) WriteJSON(w http.ResponseWriter, status int, data interface{},headers ...http.Header) error {
-	out,err:=json.Marshal(data)
-	if err!=nil{
+func (m *Module) WriteJSON(w http.ResponseWriter, status int, data interface{}, headers ...http.Header) error {
+	out, err := json.Marshal(data)
+	if err != nil {
 		return fmt.Errorf("error marshalling json: %v", err)
 	}
-	if len(headers)>0{
+	if len(headers) > 0 {
 		for k, v := range headers[0] {
-			w.Header()[k]=v
+			w.Header()[k] = v
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_,err=w.Write(out)
-	if err!=nil{
+	_, err = w.Write(out)
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *Module) ErrorJSON(w http.ResponseWriter,err error,status ...int)error{
-	statuscode:=http.StatusBadRequest
-	if len(status)>0{
-		statuscode=status[0]
+func (m *Module) ErrorJSON(w http.ResponseWriter, err error, status ...int) error {
+	statuscode := http.StatusBadRequest
+	if len(status) > 0 {
+		statuscode = status[0]
 	}
 	var payload JSONResponse
 	payload.Error = true
 	payload.Message = err.Error()
 	return m.WriteJSON(w, statuscode, payload)
 }
+func (t *Module) PushJSONToRemote(uri string, data interface{}, client ...*http.Client) (*http.Response, int, error) {
+	// create json we'll send
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return nil, 0, err
+	}
 
+	httpClient := &http.Client{}
+	if len(client) > 0 {
+		httpClient = client[0]
+	}
+
+	// Build the request and set header.
+	request, err := http.NewRequest("POST", uri, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, 0, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	// Call the url.
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer response.Body.Close()
+
+	return response, response.StatusCode, nil
+}

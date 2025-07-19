@@ -4,10 +4,9 @@ A simple, reusable Go module providing essential utilities for building modern w
 
 - ✅ File uploads with size/type validation  
 - 🔐 JWT Authentication (generation & validation) *(in progress)*  
-- 🔁 Middleware support (auth, logging, etc.) *(in progress)*  
-- 📂 Directory creation *(in progress)*  
+- 🔁 Middleware support (auth, logging, etc.) *(in progress)*   
 - 🔢 Random string generation  
-- 📄 JSON parsing and writing *(in progress)*  
+- 📄 JSON parsing and writing  
 
 Perfect for developers building REST APIs or microservices in Go.
 
@@ -29,10 +28,10 @@ Plug-and-play middleware utilities like auth guards, request logging, or your ow
 ### 🔢 Random String Generator  
 Create secure, random, URL-safe strings. Great for file renaming, access codes, and unique IDs.
 
-### 📄 JSON Utilities *(in progress)*  
+### 📄 JSON Utilities  
 Safely decode JSON from HTTP requests and encode structured responses with proper error handling.
 
-###    SlugGeneration
+###     SlugGeneration
 Generate slug from string.
 ---
 
@@ -108,6 +107,33 @@ func main() {
     str:="Random String"
     Str := m.MakeSlug(str)
     fmt.Println("Slug:",Str)
+}
+
+```
+
+### ReadJson
+```go
+import "github.com/Ayush/module"
+func handler(w http.ResponseWriter, r *http.Request) {
+    m := module.Module{}
+    var data YourStruct
+    err := m.ReadJSON(w, r, &data)
+    if err != nil {
+        http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+        return
+    }
+    // Use data...
+}
+```
+### WriteJSON
+```go
+func handler(w http.ResponseWriter, r *http.Request) {
+    m := module.Module{}
+    payload := map[string]string{"message": "success"}
+    err := m.WriteJSON(w, http.StatusOK, payload)
+    if err != nil {
+        http.Error(w, "Failed to write JSON: "+err.Error(), http.StatusInternalServerError)
+    }
 }
 
 ```
