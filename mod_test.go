@@ -1,8 +1,12 @@
 package module
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -189,26 +193,98 @@ func TestMod_CreateDirIfNotExist(t *testing.T) {
 }
 
 var slugTest = []struct {
-	name string
-	n    string
+	name     string
+	n        string
 	expected string
-	error bool
+	error    bool
 }{
 	{"ValidSlug", "Hello World! This is a test", "hello-world-this-is-a-test", false},
 	{"InvalidSlug", "Hello World! This is a test", "", true},
 }
 
 func TestMod_TestSlug(t *testing.T) {
-var mod Module
-for _, e := range slugTest {
-	slug,err:= mod.MakeSlug(e.n)
-	if err != nil && !e.error {
-		t.Errorf("expected error%s for but did not recieve %s", e.name, err.Error())
-	}
-	if !e.error &&slug!= e.expected {
-		t.Errorf("expected slug %s but got %s", e.expected, slug)
-	}
+	var mod Module
+	for _, e := range slugTest {
+		slug, err := mod.MakeSlug(e.n)
+		if err != nil && !e.error {
+			t.Errorf("expected error%s for but did not recieve %s", e.name, err.Error())
+		}
+		if !e.error && slug != e.expected {
+			t.Errorf("expected slug %s but got %s", e.expected, slug)
+		}
 
-
+	}
 }
+
+var jsonTest = []struct {
+	name         string
+	json         string
+	error        bool
+	maxsize      int64
+	allowUnknown bool
+}{
+	{"ValidJson", `{"name": "test", "value": 123}`, false, 1024, false},
+	{"InvalidJson", `{"name": "test", "value":}`, true, 1024, false},
+	{"incorrectType", `{"name": "test", "value": "not a number"}`, true, 1024, false},
+	{"EmptyJson", ``, true, 1024, false},
+}
+
+func TestMod_ReadJson(t *testing.T) {
+	var mod Module
+	for _, e := range jsonTest {
+		mod.MaxFileSize = e.maxsize
+		mod.AllowUnknownFileTypes = e.allowUnknown
+
+		var decodejson struct {
+			Name  string `json:"name"`
+			Value int    `json:"value"`
+		}
+		req, err := http.NewRequest("POST", "/", bytes.NewReader([]byte(e.json)))
+		if err != nil {
+			t.Log("Error creating request:", err)
+		}
+		rr := httptest.NewRecorder()
+		err = mod.ReadJSON(rr, req, &decodejson)
+		if e.error && err == nil {
+			t.Errorf("expected error for %s but did not receive one", e.name)
+		}
+		if !e.error && err != nil {
+			t.Errorf("did not expect error for %s but received: %s", e.name, err.Error())
+		}
+		req.Body.Close()
+	}
+}
+func TestMod_WriteJson(t *testing.T) {
+	var mod Module
+	rr := httptest.NewRecorder()
+	response := JSONResponse{
+		Error:   false,
+		Message: "Success",
+	}
+	headers := make(http.Header)
+	headers.Add("Content-Type", "application/json")
+	err := mod.WriteJSON(rr, http.StatusOK, response, headers)
+	if err != nil {
+		t.Errorf("Failed to write Json %v", err)
+	}
+}
+
+func TestMod_ErrorJson(t *testing.T) {
+	var mod Module
+	rr := httptest.NewRecorder()
+	err := mod.ErrorJSON(rr, errors.New("error"), http.StatusInternalServerError)
+	if err != nil {
+		t.Errorf("Failed to write error Json %v", err)
+	}
+	var payload JSONResponse
+	decoder := json.NewDecoder(rr.Body)
+	if err := decoder.Decode(&payload); err != nil {
+		t.Errorf("Failed to decode error Json %v", err)
+	}
+	if !payload.Error {
+		t.Errorf("Expected error to be true but got %v", payload.Error)
+	}
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status code to be %d but got %d", http.StatusInternalServerError, rr.Code)
+	}
 }

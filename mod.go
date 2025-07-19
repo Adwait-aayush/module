@@ -2,6 +2,7 @@ package module
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,8 +16,10 @@ import (
 const source = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+"
 
 type Module struct {
-	MaxFileSize int64
-	AllowedFileTypes []string
+	MaxFileSize           int64
+	AllowedFileTypes      []string
+	MaxJsonSize           int64
+	AllowUnknownFileTypes bool
 }
 
 func (m *Module) GenRandomString(n int) string {
@@ -35,21 +38,20 @@ type UploadedFile struct {
 	FileSize    int64
 }
 
-func (m *Module) UploadFile(r *http.Request, uploadDir string,rename ...bool)(*UploadedFile,error){
-renameFile := true
+func (m *Module) UploadFile(r *http.Request, uploadDir string, rename ...bool) (*UploadedFile, error) {
+	renameFile := true
 	if len(rename) > 0 {
 		renameFile = rename[0]
 	}
-	files,err:=m.UploadFiles(r, uploadDir, renameFile)
-	if err!=nil{
-		return nil,err
+	files, err := m.UploadFiles(r, uploadDir, renameFile)
+	if err != nil {
+		return nil, err
 	}
-	return files[0],nil
+	return files[0], nil
 }
 
-
 func (m *Module) UploadFiles(r *http.Request, uploadDir string, rename ...bool) ([]*UploadedFile, error) {
-	
+
 	renameFile := true
 	if len(rename) > 0 {
 		renameFile = rename[0]
@@ -57,19 +59,17 @@ func (m *Module) UploadFiles(r *http.Request, uploadDir string, rename ...bool) 
 
 	var uploadedFiles []*UploadedFile
 
-	// // Create the upload directory if it does not exist.
-	// err := m.CreateDirIfNotExist(uploadDir)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	// Create the upload directory if it does not exist.
+	err := m.CreateDirIfNotExist(uploadDir)
+	if err != nil {
+		return nil, err
+	}
 
-	
 	if m.MaxFileSize == 0 {
 		m.MaxFileSize = 1024 * 1024 * 10 // Default to 10MB
 	}
 
-	
-	err := r.ParseMultipartForm(int64(m.MaxFileSize))
+	err = r.ParseMultipartForm(int64(m.MaxFileSize))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing form data: %v", err)
 	}
@@ -147,25 +147,106 @@ func (m *Module) UploadFiles(r *http.Request, uploadDir string, rename ...bool) 
 	return uploadedFiles, nil
 }
 
-
 func (m *Module) CreateDirIfNotExist(dir string) error {
-	const mode=0755
-	if _,err:=os.Stat(dir);os.IsNotExist(err){
-		if err:=os.MkdirAll(dir,mode);err!=nil{
-			return fmt.Errorf("error creating upload directory: %v",err)
+	const mode = 0755
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, mode); err != nil {
+			return fmt.Errorf("error creating upload directory: %v", err)
 		}
 	}
 	return nil
 }
 
-func (m *Module) MakeSlug(s string)(string,error){
-	if s==""{
-		return "",errors.New("slug cannot be empty")
+func (m *Module) MakeSlug(s string) (string, error) {
+	if s == "" {
+		return "", errors.New("slug cannot be empty")
 	}
-var re = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-slug:=strings.Trim(re.ReplaceAllString(strings.ToLower(s),"-"),"-")
-if len(slug)==0{
-return "",errors.New("slug cannot be empty")
+	var re = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+	slug := strings.Trim(re.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	if len(slug) == 0 {
+		return "", errors.New("slug cannot be empty")
+	}
+	return slug, nil
 }
-return slug, nil
+
+type JSONResponse struct {
+	Error   bool        `json:"error"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
 }
+
+func (m *Module) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{}) error {
+	maxbyte := 1024 * 1024 // 1MB
+	if m.MaxJsonSize != 0 {
+		maxbyte = int(m.MaxJsonSize)
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, int64(maxbyte))
+	dec := json.NewDecoder(r.Body)
+	if !m.AllowUnknownFileTypes {
+		dec.DisallowUnknownFields()
+	}
+	err := dec.Decode(data)
+	if err != nil {
+		var syntaxError *json.SyntaxError
+		var unmarshalTypeError *json.UnmarshalTypeError
+		var invalidUnmarshalError *json.InvalidUnmarshalError
+		switch {
+		case errors.As(err, &syntaxError):
+			return fmt.Errorf("badly formed json")
+		case errors.As(err, &unmarshalTypeError):
+			return fmt.Errorf("invalid type for field %q: %s", unmarshalTypeError.Field, unmarshalTypeError.Value)
+		case errors.Is(err, io.ErrUnexpectedEOF):
+			return errors.New("body contains badly-formed JSON")
+		case errors.As(err, &invalidUnmarshalError):
+			return fmt.Errorf("invalid unmarshal error: %s", invalidUnmarshalError.Error())
+		case errors.Is(err, io.EOF):
+			return errors.New("request body must not be empty")
+		case strings.HasPrefix(err.Error(), "json: unknown field "):
+			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
+			return fmt.Errorf("unknown field %s", fieldName)
+
+		case err.Error() == "http: request body too large":
+			return fmt.Errorf("request body must not be larger than %d bytes", maxbyte)
+
+		default:
+			return err
+		}
+	}
+	err = dec.Decode(&struct{}{})
+	if err != io.EOF {
+		return errors.New("request body must only contain a single JSON object")
+	}
+
+	return nil
+}
+
+func (m *Module) WriteJSON(w http.ResponseWriter, status int, data interface{},headers ...http.Header) error {
+	out,err:=json.Marshal(data)
+	if err!=nil{
+		return fmt.Errorf("error marshalling json: %v", err)
+	}
+	if len(headers)>0{
+		for k, v := range headers[0] {
+			w.Header()[k]=v
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_,err=w.Write(out)
+	if err!=nil{
+		return err
+	}
+	return nil
+}
+
+func (m *Module) ErrorJSON(w http.ResponseWriter,err error,status ...int)error{
+	statuscode:=http.StatusBadRequest
+	if len(status)>0{
+		statuscode=status[0]
+	}
+	var payload JSONResponse
+	payload.Error = true
+	payload.Message = err.Error()
+	return m.WriteJSON(w, statuscode, payload)
+}
+
